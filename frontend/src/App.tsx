@@ -290,7 +290,30 @@ export default function App() {
             <div className="text-[11px] text-indigo-400 font-mono truncate">db53357</div>
           </div>
         </div>
+              <div className="flex items-center justify-between flex-wrap gap-3">
 
+                  <div className="flex items-center gap-3">
+
+                      <button
+                          onClick={() => navigate('https://daily-needs.runasp.net/admin/settings')}
+                          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl shadow-sm hover:bg-gray-50 transition"
+                      >
+                          <ArrowLeft className="w-4 h-4" />
+                          Back to Settings
+                      </button>
+
+                      <div>
+                          <h1 className="page-header flex items-center gap-2">
+                              <Settings className="w-7 h-7" />
+                              Platform Settings
+                          </h1>
+
+                          <p className="text-gray-500">
+                              Control what customers and workers see and can do
+                          </p>
+                      </div>
+
+                  </div>
         {/* Search */}
         <div className="px-3 py-3 border-b border-gray-800">
           <div className="relative">
