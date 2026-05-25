@@ -290,30 +290,15 @@ export default function App() {
             <div className="text-[11px] text-indigo-400 font-mono truncate">db53357</div>
           </div>
         </div>
-              <div className="flex items-center justify-between flex-wrap gap-3">
-
-                  <div className="flex items-center gap-3">
-
-                      <button
-                          onClick={() => navigate('https://daily-needs.runasp.net/admin/settings')}
-                          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl shadow-sm hover:bg-gray-50 transition"
-                      >
-                          <ArrowLeft className="w-4 h-4" />
-                          Back to Settings
-                      </button>
-
-                      <div>
-                          <h1 className="page-header flex items-center gap-2">
-                              <Settings className="w-7 h-7" />
-                              Platform Settings
-                          </h1>
-
-                          <p className="text-gray-500">
-                              Control what customers and workers see and can do
-                          </p>
-                      </div>
-
-                  </div>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                  {/* Back to Admin Settings Button */}
+                  <a
+                      href="https://daily-needs.runasp.net/admin/settings"
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 active:bg-gray-100 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-650 dark:hover:bg-gray-750 dark:active:bg-gray-700 rounded-lg shadow-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  >
+                      Admin Settings
+                  </a>         
+              </div>
         {/* Search */}
         <div className="px-3 py-3 border-b border-gray-800">
           <div className="relative">
