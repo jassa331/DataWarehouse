@@ -1,0 +1,5 @@
+{
+  "appHost": {
+    "path": "DataWarehouse.AppHost/DataWarehouse.AppHost.csproj"
+  }
+}

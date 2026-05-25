@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="DataWarehouse.AppHost/DataWarehouse.AppHost.csproj" />
+  <Project Path="DataWarehouse.Server/DataWarehouse.Server.csproj" />
+  <Project Path="frontend/frontend.esproj">
+    <Build />
+    <Deploy />
+  </Project>
+</Solution>
