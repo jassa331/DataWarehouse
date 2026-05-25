@@ -186,7 +186,7 @@ export default function App() {
 
   // Load table list
   useEffect(() => {
-      fetch('https://dailyneedswarehouse.runasp.net//api/tables')
+      fetch('https://dailyneedswarehouse.runasp.net/api/tables')
       .then(r => r.json())
       .then((d: string[]) => { setTables(d); setTablesLoading(false); })
       .catch(e => { setTablesError(String(e)); setTablesLoading(false); });
@@ -198,7 +198,7 @@ export default function App() {
     setSchemaError(null);
     setSelectedCol(null);
     try {
-        const res = await fetch(`https://dailyneedswarehouse.runasp.net//api/tables/${encodeURIComponent(name)}/schema`);
+        const res = await fetch(`https://dailyneedswarehouse.runasp.net/api/tables/${encodeURIComponent(name)}/schema`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSchema(await res.json());
     } catch (e) { setSchemaError(String(e)); }
@@ -236,7 +236,7 @@ export default function App() {
       const params = new URLSearchParams({ page: String(pg), pageSize: String(auditPageSize) });
       if (action) params.set('action', action);
       if (tableName) params.set('tableName', tableName);
-      const res = await fetch(`/api/auditlogs?${params}`);
+        const res = await fetch(`https://dailyneedswarehouse.runasp.net/api/auditlogs?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setAuditLogs(data.logs);
