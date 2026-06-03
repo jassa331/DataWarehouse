@@ -146,9 +146,54 @@ function NullBadge({ nullable }: { nullable: boolean }) {
     : <span className="text-[10px] px-1.5 py-0 rounded border border-red-800 text-red-400 font-mono leading-tight">NOT NULL</span>;
 }
 
+// ── Auth Helper ───────────────────────────────────────────────────────────────
+
+const DAILY_NEEDS_URL = 'https://daily-needs.runasp.net';
+
+function getToken(): string | null {
+  // Check URL query param first (e.g., redirected from DailyNeeds with ?token=xxx)
+  const params = new URLSearchParams(window.location.search);
+  const urlToken = params.get('token');
+  if (urlToken) {
+    localStorage.setItem('jwt_token', urlToken);
+    // Clean URL
+    window.history.replaceState({}, '', window.location.pathname);
+    return urlToken;
+  }
+  return localStorage.getItem('jwt_token');
+}
+
+function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const token = localStorage.getItem('jwt_token');
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...options.headers,
+      'Authorization': `Bearer ${token}`,
+    },
+  }).then(res => {
+    if (res.status === 401) {
+      localStorage.removeItem('jwt_token');
+      window.location.href = DAILY_NEEDS_URL;
+    }
+    return res;
+  });
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const token = getToken();
+    if (!token) {
+      window.location.href = DAILY_NEEDS_URL;
+      return;
+    }
+    setAuthenticated(true);
+  }, []);
+
   // Sidebar
   const [tables, setTables] = useState<string[]>([]);
   const [tablesLoading, setTablesLoading] = useState(true);
@@ -186,7 +231,7 @@ export default function App() {
 
   // Load table list
   useEffect(() => {
-      fetch('https://dailyneedswarehouse.runasp.net/api/tables')
+      authFetch('https://dailyneedswarehouse.runasp.net/api/tables')
       .then(r => r.json())
       .then((d: string[]) => { setTables(d); setTablesLoading(false); })
       .catch(e => { setTablesError(String(e)); setTablesLoading(false); });
@@ -198,7 +243,7 @@ export default function App() {
     setSchemaError(null);
     setSelectedCol(null);
     try {
-        const res = await fetch(`https://dailyneedswarehouse.runasp.net/api/tables/${encodeURIComponent(name)}/schema`);
+        const res = await authFetch(`https://dailyneedswarehouse.runasp.net/api/tables/${encodeURIComponent(name)}/schema`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSchema(await res.json());
     } catch (e) { setSchemaError(String(e)); }
@@ -210,7 +255,7 @@ export default function App() {
     setDataLoading(true);
     setDataError(null);
     try {
-        const res = await fetch(`https://dailyneedswarehouse.runasp.net/api/tables/${encodeURIComponent(name)}?page=${pg}&pageSize=${pageSize}`);
+        const res = await authFetch(`https://dailyneedswarehouse.runasp.net/api/tables/${encodeURIComponent(name)}?page=${pg}&pageSize=${pageSize}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setTableData(await res.json());
     } catch (e) { setDataError(String(e)); }
@@ -236,7 +281,7 @@ export default function App() {
       const params = new URLSearchParams({ page: String(pg), pageSize: String(auditPageSize) });
       if (action) params.set('action', action);
       if (tableName) params.set('tableName', tableName);
-        const res = await fetch(`https://dailyneedswarehouse.runasp.net/api/auditlogs?${params}`);
+        const res = await authFetch(`https://dailyneedswarehouse.runasp.net/api/auditlogs?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setAuditLogs(data.logs);
@@ -271,6 +316,14 @@ export default function App() {
 
   const totalPages = tableData ? Math.ceil(tableData.totalRows / pageSize) : 1;
   const filteredTables = tables.filter(t => t.toLowerCase().includes(search.toLowerCase()));
+
+  if (!authenticated) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-950 text-gray-400">
+        <div className="animate-spin h-8 w-8 border-4 border-indigo-500 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-950 text-gray-100 font-sans">
