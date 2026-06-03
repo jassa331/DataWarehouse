@@ -58,6 +58,36 @@ interface AuditLog {
   changedAt: string;
 }
 
+interface OverviewStats {
+  totalOrders: number; totalRevenue: number; activeProducts: number;
+  activeServices: number; totalWorkers: number; totalCustomers: number;
+  ordersToday: number; revenueToday: number;
+}
+interface TopProduct {
+  id: number; name: string; price: number; imageUrl: string | null;
+  rating: number; totalReviews: number; stock: number; category: string | null;
+  totalSold: number; totalRevenue: number;
+}
+interface TopService {
+  id: number; title: string; price: number; priceType: string | null;
+  imageUrl: string | null; rating: number; totalReviews: number;
+  category: string | null; workerName: string | null;
+  totalBookings: number; totalRevenue: number;
+}
+interface TopWorker {
+  id: string; fullName: string | null; profileImage: string | null;
+  rating: number; totalReviews: number; skills: string | null;
+  hourlyRate: number | null; totalJobs: number; totalEarnings: number;
+}
+interface CategoryRevenue {
+  category: string; orderCount: number; revenue: number;
+}
+interface RecentOrder {
+  id: number; orderNumber: string | null; status: string | null;
+  totalAmount: number; orderType: string | null; paymentStatus: string | null;
+  createdAt: string; customerName: string | null;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(value: unknown): string {
@@ -218,7 +248,17 @@ export default function App() {
   const pageSize = 50;
 
   // Audit Logs
-  const [view, setView] = useState<'tables' | 'audit'>('tables');
+  const [view, setView] = useState<'tables' | 'audit' | 'dashboard'>('dashboard');
+
+  // Dashboard
+  const [dashOverview, setDashOverview] = useState<OverviewStats | null>(null);
+  const [dashProducts, setDashProducts] = useState<TopProduct[]>([]);
+  const [dashServices, setDashServices] = useState<TopService[]>([]);
+  const [dashWorkers, setDashWorkers] = useState<TopWorker[]>([]);
+  const [dashCategories, setDashCategories] = useState<CategoryRevenue[]>([]);
+  const [dashOrders, setDashOrders] = useState<RecentOrder[]>([]);
+  const [dashLoading, setDashLoading] = useState(false);
+  const [dashTab, setDashTab] = useState<'overview' | 'products' | 'services' | 'workers'>('overview');
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
@@ -299,6 +339,36 @@ export default function App() {
     setExpandedLog(null);
     loadAuditLogs(1, '', '');
   };
+
+  const loadDashboard = useCallback(async () => {
+    setDashLoading(true);
+    try {
+      const base = 'https://dailyneedswarehouse.runasp.net/api/warehouse';
+      const [ov, pr, sv, wk, cat, ord] = await Promise.all([
+        authFetch(`${base}/overview`).then(r => r.json()),
+        authFetch(`${base}/top-products?limit=10`).then(r => r.json()),
+        authFetch(`${base}/top-services?limit=10`).then(r => r.json()),
+        authFetch(`${base}/top-workers?limit=10`).then(r => r.json()),
+        authFetch(`${base}/revenue-by-category`).then(r => r.json()),
+        authFetch(`${base}/recent-orders?limit=15`).then(r => r.json()),
+      ]);
+      setDashOverview(ov); setDashProducts(pr); setDashServices(sv);
+      setDashWorkers(wk); setDashCategories(cat); setDashOrders(ord);
+    } catch (e) { console.error(e); }
+    finally { setDashLoading(false); }
+  }, []);
+
+  const handleOpenDashboard = () => {
+    setView('dashboard');
+    setActiveTable(null);
+    setDashTab('overview');
+    loadDashboard();
+  };
+
+  // Load dashboard on first render
+  useEffect(() => {
+    if (view === 'dashboard') loadDashboard();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (view === 'audit') loadAuditLogs(auditPage, auditAction, auditTable);
@@ -399,6 +469,18 @@ export default function App() {
           {tables.length} tables · daily-needs.runasp.net
         </div>
 
+        {/* Dashboard nav */}
+        <button
+          onClick={handleOpenDashboard}
+          className={`flex items-center gap-2.5 px-4 py-3 border-t border-gray-800 text-sm font-semibold transition-colors w-full
+            ${view === 'dashboard' ? 'bg-emerald-600/20 text-emerald-300 border-l-2 border-emerald-400' : 'text-gray-400 hover:bg-gray-800 hover:text-emerald-300'}`}
+        >
+          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18M9 17V9m4 8V5m4 12v-4"/>
+          </svg>
+          Dashboard
+        </button>
+
         {/* Audit Logs nav */}
         <button
           onClick={handleOpenAudit}
@@ -417,7 +499,28 @@ export default function App() {
 
         {/* ── Top bar ── */}
         <header className="shrink-0 flex items-center justify-between px-6 py-3 border-b border-gray-800 bg-gray-900/60 backdrop-blur">
-          {view === 'audit' ? (
+          {view === 'dashboard' ? (
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-600/40 flex items-center justify-center">
+                <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18M9 17V9m4 8V5m4 12v-4"/>
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-base font-bold text-white leading-tight">Analytics Dashboard</h1>
+                <p className="text-[11px] text-gray-400 font-mono">Data Warehouse Insights</p>
+              </div>
+              <div className="flex gap-1 bg-gray-800 rounded-lg p-1 ml-4">
+                {(['overview', 'products', 'services', 'workers'] as const).map(t => (
+                  <button key={t} onClick={() => setDashTab(t)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors capitalize
+                      ${dashTab === t ? 'bg-emerald-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : view === 'audit' ? (
             <div className="flex items-center gap-3">
               <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-600/40 flex items-center justify-center">
                 <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -453,6 +556,17 @@ export default function App() {
             <h1 className="text-base font-bold text-gray-500">Select a table from the sidebar</h1>
           )}
 
+          {view === 'dashboard' && (
+            <button onClick={loadDashboard} disabled={dashLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-medium transition-colors shrink-0">
+              {dashLoading ? <Spinner sm /> : (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582M20 20v-5h-.581M5.635 19A9 9 0 1 1 19 7.364" />
+                </svg>
+              )}
+              Refresh
+            </button>
+          )}
           {view === 'audit' && (
             <button onClick={() => loadAuditLogs(auditPage, auditAction, auditTable)} disabled={auditLoading}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-xs font-medium transition-colors shrink-0">
@@ -479,6 +593,197 @@ export default function App() {
 
         {/* ── Content ── */}
         <div className="flex-1 flex overflow-hidden">
+
+          {/* ══ DASHBOARD VIEW ══ */}
+          {view === 'dashboard' && (
+            <div className="flex-1 overflow-y-auto p-6">
+              {dashLoading ? (
+                <div className="flex items-center justify-center py-20 gap-2 text-gray-400"><Spinner /> Loading analytics...</div>
+              ) : (
+                <>
+                  {/* Overview Tab */}
+                  {dashTab === 'overview' && dashOverview && (
+                    <div className="space-y-6">
+                      {/* Stats Cards */}
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        {[
+                          { label: 'Total Revenue', value: `$${dashOverview.totalRevenue.toLocaleString()}`, sub: `$${dashOverview.revenueToday.toLocaleString()} today`, color: 'emerald', icon: '💰' },
+                          { label: 'Total Orders', value: dashOverview.totalOrders.toLocaleString(), sub: `${dashOverview.ordersToday} today`, color: 'blue', icon: '📦' },
+                          { label: 'Products', value: dashOverview.activeProducts.toLocaleString(), sub: 'Active listings', color: 'purple', icon: '🏷️' },
+                          { label: 'Services', value: dashOverview.activeServices.toLocaleString(), sub: `${dashOverview.totalWorkers} workers`, color: 'amber', icon: '🔧' },
+                        ].map(s => (
+                          <div key={s.label} className={`rounded-xl border border-gray-800 bg-gray-900/60 p-5`}>
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{s.label}</span>
+                              <span className="text-xl">{s.icon}</span>
+                            </div>
+                            <div className="text-2xl font-bold text-white">{s.value}</div>
+                            <div className="text-xs text-gray-500 mt-1">{s.sub}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Revenue by Category */}
+                      <div className="rounded-xl border border-gray-800 bg-gray-900/60 p-5">
+                        <h3 className="text-sm font-bold text-white mb-4">Revenue by Category</h3>
+                        <div className="space-y-3">
+                          {dashCategories.map((c, i) => {
+                            const maxRev = dashCategories[0]?.revenue || 1;
+                            return (
+                              <div key={i} className="flex items-center gap-3">
+                                <span className="text-xs text-gray-300 w-32 truncate font-medium">{c.category}</span>
+                                <div className="flex-1 bg-gray-800 rounded-full h-6 overflow-hidden">
+                                  <div className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full flex items-center px-2"
+                                    style={{ width: `${Math.max(5, (c.revenue / maxRev) * 100)}%` }}>
+                                    <span className="text-[10px] font-bold text-white whitespace-nowrap">${c.revenue.toLocaleString()}</span>
+                                  </div>
+                                </div>
+                                <span className="text-xs text-gray-500 w-20 text-right">{c.orderCount} orders</span>
+                              </div>
+                            );
+                          })}
+                          {dashCategories.length === 0 && <p className="text-xs text-gray-500">No category data</p>}
+                        </div>
+                      </div>
+
+                      {/* Recent Orders */}
+                      <div className="rounded-xl border border-gray-800 bg-gray-900/60 overflow-hidden">
+                        <div className="px-5 py-4 border-b border-gray-800">
+                          <h3 className="text-sm font-bold text-white">Recent Orders</h3>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-xs">
+                            <thead>
+                              <tr className="bg-gray-800/60">
+                                <th className="px-4 py-2.5 text-left text-gray-400 font-medium">Order #</th>
+                                <th className="px-4 py-2.5 text-left text-gray-400 font-medium">Customer</th>
+                                <th className="px-4 py-2.5 text-left text-gray-400 font-medium">Type</th>
+                                <th className="px-4 py-2.5 text-left text-gray-400 font-medium">Amount</th>
+                                <th className="px-4 py-2.5 text-left text-gray-400 font-medium">Status</th>
+                                <th className="px-4 py-2.5 text-left text-gray-400 font-medium">Payment</th>
+                                <th className="px-4 py-2.5 text-left text-gray-400 font-medium">Date</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dashOrders.map(o => (
+                                <tr key={o.id} className="border-b border-gray-800/40 hover:bg-gray-800/30">
+                                  <td className="px-4 py-2.5 font-mono text-indigo-400">{o.orderNumber || o.id}</td>
+                                  <td className="px-4 py-2.5 text-gray-300">{o.customerName || '—'}</td>
+                                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${o.orderType === 'Service' ? 'bg-purple-900/60 text-purple-300' : 'bg-blue-900/60 text-blue-300'}`}>{o.orderType || '—'}</span></td>
+                                  <td className="px-4 py-2.5 font-semibold text-emerald-400">${o.totalAmount.toLocaleString()}</td>
+                                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    o.status === 'Completed' ? 'bg-emerald-900/60 text-emerald-300' :
+                                    o.status === 'Cancelled' ? 'bg-red-900/60 text-red-300' :
+                                    o.status === 'Pending' ? 'bg-amber-900/60 text-amber-300' :
+                                    'bg-gray-700 text-gray-300'}`}>{o.status || '—'}</span></td>
+                                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    o.paymentStatus === 'Paid' ? 'bg-emerald-900/60 text-emerald-300' : 'bg-amber-900/60 text-amber-300'}`}>{o.paymentStatus || '—'}</span></td>
+                                  <td className="px-4 py-2.5 text-gray-500 font-mono">{new Date(o.createdAt).toLocaleDateString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Products Tab */}
+                  {dashTab === 'products' && (
+                    <div className="space-y-4">
+                      <h2 className="text-lg font-bold text-white">🏆 Top Selling Products</h2>
+                      <div className="grid gap-4">
+                        {dashProducts.map((p, i) => (
+                          <div key={p.id} className="flex items-center gap-4 rounded-xl border border-gray-800 bg-gray-900/60 p-4 hover:border-gray-700 transition-colors">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0 ${
+                              i === 0 ? 'bg-yellow-500/20 text-yellow-400' : i === 1 ? 'bg-gray-400/20 text-gray-300' : i === 2 ? 'bg-amber-700/20 text-amber-500' : 'bg-gray-800 text-gray-500'}`}>
+                              #{i + 1}
+                            </div>
+                            {p.imageUrl && <img src={p.imageUrl} alt="" className="w-12 h-12 rounded-lg object-cover border border-gray-700" />}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-white text-sm truncate">{p.name}</div>
+                              <div className="text-xs text-gray-400 mt-0.5">{p.category || 'Uncategorized'} · ${p.price} · Stock: {p.stock}</div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="text-sm font-bold text-emerald-400">{p.totalSold} sold</div>
+                              <div className="text-xs text-gray-500">${p.totalRevenue.toLocaleString()} revenue</div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="text-sm text-yellow-400">{'⭐'.repeat(Math.round(p.rating))}</div>
+                              <div className="text-[10px] text-gray-500">{p.rating.toFixed(1)} ({p.totalReviews})</div>
+                            </div>
+                          </div>
+                        ))}
+                        {dashProducts.length === 0 && <p className="text-gray-500 text-sm py-8 text-center">No product data available</p>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Services Tab */}
+                  {dashTab === 'services' && (
+                    <div className="space-y-4">
+                      <h2 className="text-lg font-bold text-white">🔧 Most Booked Services</h2>
+                      <div className="grid gap-4">
+                        {dashServices.map((s, i) => (
+                          <div key={s.id} className="flex items-center gap-4 rounded-xl border border-gray-800 bg-gray-900/60 p-4 hover:border-gray-700 transition-colors">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0 ${
+                              i === 0 ? 'bg-yellow-500/20 text-yellow-400' : i === 1 ? 'bg-gray-400/20 text-gray-300' : i === 2 ? 'bg-amber-700/20 text-amber-500' : 'bg-gray-800 text-gray-500'}`}>
+                              #{i + 1}
+                            </div>
+                            {s.imageUrl && <img src={s.imageUrl} alt="" className="w-12 h-12 rounded-lg object-cover border border-gray-700" />}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-white text-sm truncate">{s.title}</div>
+                              <div className="text-xs text-gray-400 mt-0.5">{s.category || 'Uncategorized'} · ${s.price}{s.priceType ? `/${s.priceType}` : ''} · by {s.workerName || 'Unknown'}</div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="text-sm font-bold text-purple-400">{s.totalBookings} bookings</div>
+                              <div className="text-xs text-gray-500">${s.totalRevenue.toLocaleString()} revenue</div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="text-sm text-yellow-400">{'⭐'.repeat(Math.round(s.rating))}</div>
+                              <div className="text-[10px] text-gray-500">{s.rating.toFixed(1)} ({s.totalReviews})</div>
+                            </div>
+                          </div>
+                        ))}
+                        {dashServices.length === 0 && <p className="text-gray-500 text-sm py-8 text-center">No service data available</p>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Workers Tab */}
+                  {dashTab === 'workers' && (
+                    <div className="space-y-4">
+                      <h2 className="text-lg font-bold text-white">👷 Top Rated Workers</h2>
+                      <div className="grid gap-4">
+                        {dashWorkers.map((w, i) => (
+                          <div key={w.id} className="flex items-center gap-4 rounded-xl border border-gray-800 bg-gray-900/60 p-4 hover:border-gray-700 transition-colors">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0 ${
+                              i === 0 ? 'bg-yellow-500/20 text-yellow-400' : i === 1 ? 'bg-gray-400/20 text-gray-300' : i === 2 ? 'bg-amber-700/20 text-amber-500' : 'bg-gray-800 text-gray-500'}`}>
+                              #{i + 1}
+                            </div>
+                            {w.profileImage ? <img src={w.profileImage} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-gray-700" /> : <div className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center text-lg">👤</div>}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-white text-sm">{w.fullName || 'Unknown'}</div>
+                              <div className="text-xs text-gray-400 mt-0.5">{w.skills || 'No skills listed'}{w.hourlyRate ? ` · $${w.hourlyRate}/hr` : ''}</div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="text-sm font-bold text-blue-400">{w.totalJobs} jobs</div>
+                              <div className="text-xs text-gray-500">${w.totalEarnings.toLocaleString()} earned</div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="text-sm text-yellow-400">{'⭐'.repeat(Math.round(w.rating))}</div>
+                              <div className="text-[10px] text-gray-500">{w.rating.toFixed(1)} ({w.totalReviews} reviews)</div>
+                            </div>
+                          </div>
+                        ))}
+                        {dashWorkers.length === 0 && <p className="text-gray-500 text-sm py-8 text-center">No worker data available</p>}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {/* ══ AUDIT LOGS VIEW ══ */}
           {view === 'audit' && (

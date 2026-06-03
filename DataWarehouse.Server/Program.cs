@@ -340,5 +340,199 @@ api.MapGet("auditlogs", async (int page, int pageSize, string? action, string? t
 });
 
 app.MapDefaultEndpoints();
+
+// ── Warehouse Analytics API ──────────────────────────────────────────────────
+var warehouse = app.MapGroup("/api/warehouse").RequireAuthorization();
+
+// GET /api/warehouse/overview — summary stats
+warehouse.MapGet("overview", async () =>
+{
+    await using var conn = new SqlConnection(connectionString);
+    await conn.OpenAsync();
+    var sql = @"
+        SELECT
+            (SELECT COUNT(*) FROM Orders) AS totalOrders,
+            (SELECT ISNULL(SUM(TotalAmount),0) FROM Orders WHERE Status NOT IN ('Cancelled')) AS totalRevenue,
+            (SELECT COUNT(*) FROM Products WHERE IsActive=1) AS activeProducts,
+            (SELECT COUNT(*) FROM Services WHERE IsActive=1) AS activeServices,
+            (SELECT COUNT(DISTINCT u.Id) FROM AspNetUsers u JOIN AspNetUserRoles ur ON u.Id=ur.UserId JOIN AspNetRoles r ON ur.RoleId=r.Id WHERE r.Name='Worker') AS totalWorkers,
+            (SELECT COUNT(DISTINCT CustomerId) FROM Orders) AS totalCustomers,
+            (SELECT COUNT(*) FROM Orders WHERE CAST(CreatedAt AS DATE)=CAST(GETDATE() AS DATE)) AS ordersToday,
+            (SELECT ISNULL(SUM(TotalAmount),0) FROM Orders WHERE CAST(CreatedAt AS DATE)=CAST(GETDATE() AS DATE) AND Status NOT IN ('Cancelled')) AS revenueToday";
+    await using var cmd = new SqlCommand(sql, conn);
+    await using var r = await cmd.ExecuteReaderAsync();
+    await r.ReadAsync();
+    return Results.Ok(new
+    {
+        totalOrders = r.GetInt32(0),
+        totalRevenue = r.GetDecimal(1),
+        activeProducts = r.GetInt32(2),
+        activeServices = r.GetInt32(3),
+        totalWorkers = r.GetInt32(4),
+        totalCustomers = r.GetInt32(5),
+        ordersToday = r.GetInt32(6),
+        revenueToday = r.GetDecimal(7)
+    });
+});
+
+// GET /api/warehouse/top-products — top selling products
+warehouse.MapGet("top-products", async (int? limit) =>
+{
+    var top = limit ?? 10;
+    await using var conn = new SqlConnection(connectionString);
+    await conn.OpenAsync();
+    var sql = $@"
+        SELECT TOP({top})
+            p.Id, p.Name, p.Price, p.ImageUrl, p.Rating, p.TotalReviews, p.Stock,
+            c.Name AS CategoryName,
+            ISNULL(SUM(oi.Quantity),0) AS totalSold,
+            ISNULL(SUM(oi.TotalPrice),0) AS totalRevenue
+        FROM Products p
+        LEFT JOIN Categories c ON p.CategoryId=c.Id
+        LEFT JOIN OrderItems oi ON oi.ProductId=p.Id
+        LEFT JOIN Orders o ON oi.OrderId=o.Id AND o.Status NOT IN ('Cancelled')
+        WHERE p.IsActive=1
+        GROUP BY p.Id, p.Name, p.Price, p.ImageUrl, p.Rating, p.TotalReviews, p.Stock, c.Name
+        ORDER BY totalSold DESC, totalRevenue DESC";
+    await using var cmd = new SqlCommand(sql, conn);
+    await using var r = await cmd.ExecuteReaderAsync();
+    var list = new List<object>();
+    while (await r.ReadAsync())
+        list.Add(new
+        {
+            id = r.GetInt32(0), name = r.GetString(1), price = r.GetDecimal(2),
+            imageUrl = r.IsDBNull(3) ? null : r.GetString(3),
+            rating = r.IsDBNull(4) ? 0.0 : r.GetDouble(4), totalReviews = r.GetInt32(5),
+            stock = r.GetInt32(6), category = r.IsDBNull(7) ? null : r.GetString(7),
+            totalSold = r.GetInt32(8), totalRevenue = r.GetDecimal(9)
+        });
+    return Results.Ok(list);
+});
+
+// GET /api/warehouse/top-services — most booked services
+warehouse.MapGet("top-services", async (int? limit) =>
+{
+    var top = limit ?? 10;
+    await using var conn = new SqlConnection(connectionString);
+    await conn.OpenAsync();
+    var sql = $@"
+        SELECT TOP({top})
+            s.Id, s.Title, s.Price, s.PriceType, s.ImageUrl, s.Rating, s.TotalReviews,
+            c.Name AS CategoryName,
+            u.FullName AS WorkerName,
+            COUNT(o.Id) AS totalBookings,
+            ISNULL(SUM(o.TotalAmount),0) AS totalRevenue
+        FROM Services s
+        LEFT JOIN Categories c ON s.CategoryId=c.Id
+        LEFT JOIN AspNetUsers u ON s.WorkerId=u.Id
+        LEFT JOIN Orders o ON o.ServiceId=s.Id AND o.Status NOT IN ('Cancelled')
+        WHERE s.IsActive=1
+        GROUP BY s.Id, s.Title, s.Price, s.PriceType, s.ImageUrl, s.Rating, s.TotalReviews, c.Name, u.FullName
+        ORDER BY totalBookings DESC, totalRevenue DESC";
+    await using var cmd = new SqlCommand(sql, conn);
+    await using var r = await cmd.ExecuteReaderAsync();
+    var list = new List<object>();
+    while (await r.ReadAsync())
+        list.Add(new
+        {
+            id = r.GetInt32(0), title = r.GetString(1), price = r.GetDecimal(2),
+            priceType = r.IsDBNull(3) ? null : r.GetString(3),
+            imageUrl = r.IsDBNull(4) ? null : r.GetString(4),
+            rating = r.IsDBNull(5) ? 0.0 : r.GetDouble(5), totalReviews = r.GetInt32(6),
+            category = r.IsDBNull(7) ? null : r.GetString(7),
+            workerName = r.IsDBNull(8) ? null : r.GetString(8),
+            totalBookings = r.GetInt32(9), totalRevenue = r.GetDecimal(10)
+        });
+    return Results.Ok(list);
+});
+
+// GET /api/warehouse/top-workers — highest rated workers
+warehouse.MapGet("top-workers", async (int? limit) =>
+{
+    var top = limit ?? 10;
+    await using var conn = new SqlConnection(connectionString);
+    await conn.OpenAsync();
+    var sql = $@"
+        SELECT TOP({top})
+            u.Id, u.FullName, u.ProfileImage, u.Rating, u.TotalReviews, u.Skills, u.HourlyRate,
+            COUNT(DISTINCT o.Id) AS totalJobs,
+            ISNULL(SUM(o.TotalAmount),0) AS totalEarnings
+        FROM AspNetUsers u
+        JOIN AspNetUserRoles ur ON u.Id=ur.UserId
+        JOIN AspNetRoles rl ON ur.RoleId=rl.Id
+        LEFT JOIN Orders o ON o.WorkerId=u.Id AND o.Status NOT IN ('Cancelled')
+        WHERE rl.Name='Worker' AND u.IsActive=1
+        GROUP BY u.Id, u.FullName, u.ProfileImage, u.Rating, u.TotalReviews, u.Skills, u.HourlyRate
+        ORDER BY u.Rating DESC, totalJobs DESC";
+    await using var cmd = new SqlCommand(sql, conn);
+    await using var r = await cmd.ExecuteReaderAsync();
+    var list = new List<object>();
+    while (await r.ReadAsync())
+        list.Add(new
+        {
+            id = r.GetString(0), fullName = r.IsDBNull(1) ? null : r.GetString(1),
+            profileImage = r.IsDBNull(2) ? null : r.GetString(2),
+            rating = r.IsDBNull(3) ? 0.0 : r.GetDouble(3), totalReviews = r.GetInt32(4),
+            skills = r.IsDBNull(5) ? null : r.GetString(5),
+            hourlyRate = r.IsDBNull(6) ? (decimal?)null : r.GetDecimal(6),
+            totalJobs = r.GetInt32(7), totalEarnings = r.GetDecimal(8)
+        });
+    return Results.Ok(list);
+});
+
+// GET /api/warehouse/revenue-by-category — revenue breakdown
+warehouse.MapGet("revenue-by-category", async () =>
+{
+    await using var conn = new SqlConnection(connectionString);
+    await conn.OpenAsync();
+    var sql = @"
+        SELECT c.Name, COUNT(DISTINCT o.Id) AS orderCount, ISNULL(SUM(oi.TotalPrice),0) AS revenue
+        FROM Categories c
+        LEFT JOIN Products p ON p.CategoryId=c.Id
+        LEFT JOIN OrderItems oi ON oi.ProductId=p.Id
+        LEFT JOIN Orders o ON oi.OrderId=o.Id AND o.Status NOT IN ('Cancelled')
+        WHERE c.IsActive=1
+        GROUP BY c.Id, c.Name
+        ORDER BY revenue DESC";
+    await using var cmd = new SqlCommand(sql, conn);
+    await using var r = await cmd.ExecuteReaderAsync();
+    var list = new List<object>();
+    while (await r.ReadAsync())
+        list.Add(new
+        {
+            category = r.GetString(0), orderCount = r.GetInt32(1), revenue = r.GetDecimal(2)
+        });
+    return Results.Ok(list);
+});
+
+// GET /api/warehouse/recent-orders — last 20 orders
+warehouse.MapGet("recent-orders", async (int? limit) =>
+{
+    var top = limit ?? 20;
+    await using var conn = new SqlConnection(connectionString);
+    await conn.OpenAsync();
+    var sql = $@"
+        SELECT TOP({top})
+            o.Id, o.OrderNumber, o.Status, o.TotalAmount, o.OrderType, o.PaymentStatus,
+            o.CreatedAt, u.FullName AS CustomerName
+        FROM Orders o
+        LEFT JOIN AspNetUsers u ON o.CustomerId=u.Id
+        ORDER BY o.CreatedAt DESC";
+    await using var cmd = new SqlCommand(sql, conn);
+    await using var r = await cmd.ExecuteReaderAsync();
+    var list = new List<object>();
+    while (await r.ReadAsync())
+        list.Add(new
+        {
+            id = r.GetInt32(0), orderNumber = r.IsDBNull(1) ? null : r.GetString(1),
+            status = r.IsDBNull(2) ? null : r.GetString(2),
+            totalAmount = r.GetDecimal(3), orderType = r.IsDBNull(4) ? null : r.GetString(4),
+            paymentStatus = r.IsDBNull(5) ? null : r.GetString(5),
+            createdAt = r.GetDateTime(6).ToString("o"),
+            customerName = r.IsDBNull(7) ? null : r.GetString(7)
+        });
+    return Results.Ok(list);
+});
+
 app.UseFileServer();
 app.Run();
